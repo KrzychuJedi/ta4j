@@ -36,6 +36,12 @@
             <version>1.2.3</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.deeplearning4j</groupId>
+            <artifactId>deeplearning4j-core</artifactId>
+            <version>0.9.1</version>
+        </dependency>
+
     </dependencies>
 
 </project>

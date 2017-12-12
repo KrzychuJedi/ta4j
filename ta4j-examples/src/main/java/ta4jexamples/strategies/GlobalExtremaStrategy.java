@@ -23,6 +23,7 @@
 package ta4jexamples.strategies;
 
 import org.ta4j.core.*;
+import org.ta4j.core.analysis.criteria.BuyAndHoldCriterion;
 import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
 import org.ta4j.core.indicators.helpers.*;
 import org.ta4j.core.trading.rules.OverIndicatorRule;
@@ -81,5 +82,7 @@ public class GlobalExtremaStrategy {
 
         // Analysis
         System.out.println("Total profit for the strategy: " + new TotalProfitCriterion().calculate(series, tradingRecord));
+        System.out.println("Buy-and-hold: " + new BuyAndHoldCriterion().calculate(series, tradingRecord));
+
     }
 }

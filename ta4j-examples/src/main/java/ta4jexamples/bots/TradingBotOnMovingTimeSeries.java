@@ -40,6 +40,8 @@ public class TradingBotOnMovingTimeSeries {
     /** Close price of the last tick */
     private static Decimal LAST_TICK_CLOSE_PRICE;
 
+    static SMAIndicator sma;
+
     /**
      * Builds a moving time series (i.e. keeping only the maxTickCount last ticks)
      * @param maxTickCount the number of ticks to keep in the time series (at maximum)
@@ -65,7 +67,7 @@ public class TradingBotOnMovingTimeSeries {
         }
 
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
-        SMAIndicator sma = new SMAIndicator(closePrice, 12);
+        sma = new SMAIndicator(closePrice, 12);
 
         // Signals
         // Buy when SMA goes over close price
@@ -131,6 +133,7 @@ public class TradingBotOnMovingTimeSeries {
             series.addTick(newTick);
             
             int endIndex = series.getEndIndex();
+            System.out.println(sma.getValue(endIndex));
             if (strategy.shouldEnter(endIndex)) {
                 // Our strategy should enter
                 System.out.println("Strategy should ENTER on " + endIndex);
