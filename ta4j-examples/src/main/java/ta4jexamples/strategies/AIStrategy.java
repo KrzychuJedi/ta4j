@@ -15,27 +15,7 @@ import org.ta4j.core.TradingRecord;
 public class AIStrategy implements Strategy {
 
     public AIStrategy() {
-        MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
-                .iterations(1)
-                .weightInit(WeightInit.XAVIER)
-                .activation(Activation.RELU)
-                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT)
-                .learningRate(0.05)
-                .list()
-                .backprop(true)
-                .layer(0, new DenseLayer.Builder()
-                        .nIn(5) // Number of input datapoints.
-                        .nOut(10) // Number of output datapoints.
-                        .activation(Activation.RELU) // Activation function.
-                        .weightInit(WeightInit.XAVIER) // Weight initialization.
-                        .build())
-                .layer(1, new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
-                        .nIn(10)
-                        .nOut(3)
-                        .activation(Activation.SOFTMAX)
-                        .weightInit(WeightInit.XAVIER)
-                        .build())
-                .build();
+
 
     }
 

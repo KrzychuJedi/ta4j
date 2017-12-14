@@ -23,13 +23,16 @@
 package ta4jexamples.bots;
 
 import org.ta4j.core.*;
-import org.ta4j.core.indicators.SMAIndicator;
-import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.*;
+import org.ta4j.core.indicators.helpers.*;
 import org.ta4j.core.trading.rules.OverIndicatorRule;
 import org.ta4j.core.trading.rules.UnderIndicatorRule;
+import sun.rmi.server.Activation;
 import ta4jexamples.loaders.CsvTradesLoader;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * This class is an example of a dummy trading bot using ta4j.
@@ -40,7 +43,21 @@ public class TradingBotOnMovingTimeSeries {
     /** Close price of the last tick */
     private static Decimal LAST_TICK_CLOSE_PRICE;
 
-    static SMAIndicator sma;
+    private enum TYPE {
+
+        BUY("BUY"),
+        SELL("SELL"),
+        NOTHING("NOTHING");
+
+        TYPE(String name) {
+            this.name = name;
+        }
+
+        private String name;
+
+    }
+
+    static List<Indicator> indicators = new ArrayList<>();
 
     /**
      * Builds a moving time series (i.e. keeping only the maxTickCount last ticks)
@@ -51,7 +68,7 @@ public class TradingBotOnMovingTimeSeries {
         TimeSeries series = CsvTradesLoader.loadBitstampSeries();
         System.out.print("Initial tick count: " + series.getTickCount());
         // Limitating the number of ticks to maxTickCount
-        series.setMaximumTickCount(maxTickCount);
+//        series.setMaximumTickCount(maxTickCount);
         LAST_TICK_CLOSE_PRICE = series.getTick(series.getEndIndex()).getClosePrice();
         System.out.println(" (limited to " + maxTickCount + "), close price = " + LAST_TICK_CLOSE_PRICE);
         return series;
@@ -67,14 +84,68 @@ public class TradingBotOnMovingTimeSeries {
         }
 
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
-        sma = new SMAIndicator(closePrice, 12);
+        VolumeIndicator volumeIndicator = new VolumeIndicator(series);
+        OpenPriceIndicator openPriceIndicator = new OpenPriceIndicator(series);
+        MinPriceIndicator minPriceIndicator = new MinPriceIndicator(series);
+        MaxPriceIndicator maxPriceIndicator = new MaxPriceIndicator(series);
+
+        SMAIndicator sma5 = new SMAIndicator(closePrice, 5);
+        SMAIndicator sma12 = new SMAIndicator(closePrice, 12);
+        SMAIndicator sma50 = new SMAIndicator(closePrice, 50);
+        SMAIndicator sma200 = new SMAIndicator(closePrice, 200);
+
+        RSIIndicator rsi1 = new RSIIndicator(closePrice, 1);
+        RSIIndicator rsi2 = new RSIIndicator(closePrice, 2);
+
+        EMAIndicator ema5 = new EMAIndicator(closePrice, 5);
+        EMAIndicator ema12 = new EMAIndicator(closePrice, 12);
+        EMAIndicator ema50 = new EMAIndicator(closePrice, 50);
+        EMAIndicator ema200 = new EMAIndicator(closePrice, 200);
+
+        MACDIndicator macd = new MACDIndicator(closePrice, 9, 26);
+
+        CCIIndicator CCI5 = new CCIIndicator(series, 5);
+        CCIIndicator CCI50 = new CCIIndicator(series, 50);
+        CCIIndicator CCI200 = new CCIIndicator(series, 200);
+
+        ROCIndicator rocIndicator = new ROCIndicator(closePrice, 12);
+        ROCIndicator rocIndicatorVolume = new ROCIndicator(closePrice, 12);
+
+        indicators.add(volumeIndicator);
+        indicators.add(closePrice);
+        indicators.add(openPriceIndicator);
+        indicators.add(minPriceIndicator);
+        indicators.add(maxPriceIndicator);
+
+        indicators.add(sma5);
+        indicators.add(sma12);
+        indicators.add(sma50);
+        indicators.add(sma200);        
+        
+        indicators.add(ema5);
+        indicators.add(ema12);
+        indicators.add(ema50);
+        indicators.add(ema200);
+
+        indicators.add(rsi1);
+        indicators.add(rsi2);
+
+        indicators.add(macd);
+
+        indicators.add(CCI5);
+        indicators.add(CCI50);
+        indicators.add(CCI200);
+
+        indicators.add(rocIndicator);
+        indicators.add(rocIndicatorVolume);
+
 
         // Signals
         // Buy when SMA goes over close price
         // Sell when close price goes over SMA
         Strategy buySellSignals = new BaseStrategy(
-                new OverIndicatorRule(sma, closePrice),
-                new UnderIndicatorRule(sma, closePrice)
+                new OverIndicatorRule(sma12, closePrice),
+                new UnderIndicatorRule(sma12, closePrice)
         );
         return buySellSignals;
     }
@@ -107,14 +178,61 @@ public class TradingBotOnMovingTimeSeries {
         return new BaseTick(ZonedDateTime.now(), openPrice, maxPrice, minPrice, closePrice, Decimal.ONE);
     }
 
+    private static MultiLayerConfiguration getNetwork() {
+        MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
+                .iterations(1)
+                .weightInit(WeightInit.XAVIER)
+                .activation(Activation.RELU)
+                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT)
+                .learningRate(0.05)
+                .list()
+                .backprop(true)
+                .layer(0, new DenseLayer.Builder()
+                        .nIn(5) // Number of input datapoints.
+                        .nOut(10) // Number of output datapoints.
+                        .activation(Activation.RELU) // Activation function.
+                        .weightInit(WeightInit.XAVIER) // Weight initialization.
+                        .build())
+                .layer(1, new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
+                        .nIn(10)
+                        .nOut(3)
+                        .activation(Activation.SOFTMAX)
+                        .weightInit(WeightInit.XAVIER)
+                        .build())
+                .build();
+
+        return conf;
+    }
+
+    private static TYPE getType(TimeSeries series, int idx, int frame){
+        Tick first = series.getTick(idx);
+        Tick second = series.getTick(frame);
+
+        if(second.getClosePrice().multipliedBy(Decimal.valueOf(1.05)).isGreaterThan(first.getClosePrice())){
+            return TYPE.BUY;
+        } else if (second.getClosePrice().multipliedBy(Decimal.valueOf(0.95)).isGreaterThan(first.getClosePrice()){
+            return TYPE.SELL;
+        }
+        return TYPE.NOTHING;
+    }
+
     public static void main(String[] args) throws InterruptedException {
 
         System.out.println("********************** Initialization **********************");
         // Getting the time series
         TimeSeries series = initMovingTimeSeries(20);
 
+        getType(series, 0, 5);
+        DataSetIterator iter = new RecordReaderDataSetIterator(recordReader, 784, labels.size());
+
+        MultiLayerConfiguration multiLayerConfiguration = getNetwork();
+
         // Building the trading strategy
         Strategy strategy = buildStrategy(series);
+
+
+
+        multiLayerConfiguration.fit();
         
         // Initializing the trading history
         TradingRecord tradingRecord = new BaseTradingRecord();
@@ -133,7 +251,6 @@ public class TradingBotOnMovingTimeSeries {
             series.addTick(newTick);
             
             int endIndex = series.getEndIndex();
-            System.out.println(sma.getValue(endIndex));
             if (strategy.shouldEnter(endIndex)) {
                 // Our strategy should enter
                 System.out.println("Strategy should ENTER on " + endIndex);
