@@ -32,5 +32,10 @@
             <version>3.6.1</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.datavec</groupId>
+            <artifactId>datavec-api</artifactId>
+            <version>0.9.1</version>
+        </dependency>
     </dependencies>
 </project>

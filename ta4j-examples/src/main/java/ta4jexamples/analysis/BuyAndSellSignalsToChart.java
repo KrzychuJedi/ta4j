@@ -55,7 +55,7 @@ public class BuyAndSellSignalsToChart {
      * @param name the name of the chart time series
      * @return the JFreeChart time series
      */
-    private static org.jfree.data.time.TimeSeries buildChartTimeSeries(TimeSeries tickSeries, Indicator<Decimal> indicator, String name) {
+    public static org.jfree.data.time.TimeSeries buildChartTimeSeries(TimeSeries tickSeries, Indicator<Decimal> indicator, String name) {
         org.jfree.data.time.TimeSeries chartTimeSeries = new org.jfree.data.time.TimeSeries(name);
         for (int i = 0; i < tickSeries.getTickCount(); i++) {
             Tick tick = tickSeries.getTick(i);
@@ -96,7 +96,7 @@ public class BuyAndSellSignalsToChart {
      * Displays a chart in a frame.
      * @param chart the chart to be displayed
      */
-    private static void displayChart(JFreeChart chart) {
+    public static void displayChart(JFreeChart chart) {
         // Chart panel
         ChartPanel panel = new ChartPanel(chart);
         panel.setFillZoomRectangle(true);
