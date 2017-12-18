@@ -44,12 +44,14 @@ public class TickRecordReader implements RecordReader {
 
     private static ActionType getType(TimeSeries series, int idx, int frame){
         Tick first = series.getTick(idx);
-        Tick second = series.getTick(frame);
+        Tick firstAndOne = series.getTick(idx + 1);
+        Tick second = series.getTick(idx + frame);
 
         Decimal pertencage = second.getClosePrice().multipliedBy(Decimal.valueOf(100)).dividedBy(first.getClosePrice());
-        if(pertencage.isGreaterThanOrEqual(Decimal.valueOf(101))){
+        if(firstAndOne.getClosePrice().isGreaterThan(first.getClosePrice())){
             return ActionType.BUY;
-        } else if (pertencage.isLessThanOrEqual(Decimal.valueOf(97))){
+//        } else if (pertencage.isLessThanOrEqual(Decimal.valueOf(95))){
+        } else if (second.getClosePrice().isLessThan(first.getClosePrice())){
             return ActionType.SELL;
         }
         return ActionType.NOTHING;

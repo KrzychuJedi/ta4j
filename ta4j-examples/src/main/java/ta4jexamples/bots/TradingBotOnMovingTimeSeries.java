@@ -1,18 +1,18 @@
 /**
  * The MIT License (MIT)
- *
+ * <p>
  * Copyright (c) 2014-2017 Marc de Verdelhan & respective authors (see AUTHORS)
- *
+ * <p>
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
  * the Software without restriction, including without limitation the rights to
  * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
  * the Software, and to permit persons to whom the Software is furnished to do so,
  * subject to the following conditions:
- *
+ * <p>
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- *
+ * <p>
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
  * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
@@ -30,9 +30,14 @@ import org.datavec.api.records.metadata.RecordMetaData;
 import org.datavec.api.records.reader.RecordReader;
 import org.datavec.api.split.InputSplit;
 import org.datavec.api.writable.Writable;
+import org.deeplearning4j.datasets.datavec.SequenceRecordReaderDataSetIterator;
 import org.deeplearning4j.eval.Evaluation;
+import org.deeplearning4j.nn.conf.GradientNormalization;
 import org.deeplearning4j.nn.conf.Updater;
 import org.deeplearning4j.nn.conf.layers.GravesLSTM;
+import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
+import org.deeplearning4j.nn.conf.preprocessor.FeedForwardToRnnPreProcessor;
+import org.deeplearning4j.nn.conf.preprocessor.RnnToFeedForwardPreProcessor;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
@@ -83,7 +88,9 @@ import static ta4jexamples.analysis.BuyAndSellSignalsToChart.displayChart;
  */
 public class TradingBotOnMovingTimeSeries {
 
-    /** Close price of the last tick */
+    /**
+     * Close price of the last tick
+     */
     private static Decimal LAST_TICK_CLOSE_PRICE;
 
     static List<Indicator<Decimal>> indicators = new ArrayList<>();
@@ -92,6 +99,7 @@ public class TradingBotOnMovingTimeSeries {
 
     /**
      * Builds a moving time series (i.e. keeping only the maxTickCount last ticks)
+     *
      * @param maxTickCount the number of ticks to keep in the time series (at maximum)
      * @return a moving time series
      */
@@ -100,8 +108,8 @@ public class TradingBotOnMovingTimeSeries {
 
         TimeSeries[] timeSeries = new TimeSeries[2];
 
-        timeSeries[0] = new BaseTimeSeries(new ArrayList<>(ticks.subList(0,1200)));
-        timeSeries[1] = new BaseTimeSeries(new ArrayList<>(ticks.subList(1200,ticks.size()-1)));
+        timeSeries[0] = new BaseTimeSeries(new ArrayList<>(ticks.subList(0,600)));
+        timeSeries[1] = new BaseTimeSeries(new ArrayList<>(ticks.subList(600,ticks.size()-1)));
 
         System.out.print("Initial tick count: " + timeSeries[0].getTickCount());
         LAST_TICK_CLOSE_PRICE = timeSeries[0].getTick(timeSeries[0].getEndIndex()).getClosePrice();
@@ -148,8 +156,8 @@ public class TradingBotOnMovingTimeSeries {
         ROCIndicator rocIndicator = new ROCIndicator(closePrice, 12);
         ROCIndicator rocIndicatorVolume = new ROCIndicator(closePrice, 12);
 
-        indicators.add(volumeIndicator);
         indicators.add(closePrice);
+        indicators.add(volumeIndicator);
         indicators.add(openPriceIndicator);
         indicators.add(minPriceIndicator);
         indicators.add(maxPriceIndicator);
@@ -157,8 +165,8 @@ public class TradingBotOnMovingTimeSeries {
         indicators.add(sma5);
         indicators.add(sma12);
         indicators.add(sma50);
-        indicators.add(sma200);        
-        
+        indicators.add(sma200);
+
         indicators.add(ema5);
         indicators.add(ema12);
         indicators.add(ema50);
@@ -176,7 +184,6 @@ public class TradingBotOnMovingTimeSeries {
         indicators.add(rocIndicator);
         indicators.add(rocIndicatorVolume);
 
-
         // Signals
         // Buy when SMA goes over close price
         // Sell when close price goes over SMA
@@ -189,6 +196,7 @@ public class TradingBotOnMovingTimeSeries {
 
     /**
      * Generates a random decimal number between min and max.
+     *
      * @param min the minimum bound
      * @param max the maximum bound
      * @return a random decimal number between min and max
@@ -203,6 +211,7 @@ public class TradingBotOnMovingTimeSeries {
 
     /**
      * Generates a random tick.
+     *
      * @return a random tick
      */
     private static Tick generateRandomTick() {
@@ -258,12 +267,28 @@ public class TradingBotOnMovingTimeSeries {
                         .activation(Activation.TANH).build())
                 .layer(3, new DenseLayer.Builder().nIn(secondLayerSize).nOut(secondLayerSize)
                         .activation(Activation.TANH).build())
-                .layer(4, new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
+                .layer(4, new GravesLSTM.Builder()
+                        .activation(Activation.SOFTSIGN)
                         .nIn(secondLayerSize)
-                        .nOut(classes)
-                        .activation(Activation.SOFTMAX)
+                        .nOut(secondLayerSize)
                         .weightInit(WeightInit.XAVIER)
+                        .updater(Updater.ADAGRAD)
+                        .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
+                        .gradientNormalizationThreshold(10)
+                        .learningRate(0.008)
                         .build())
+                .layer(5, new RnnOutputLayer.Builder(LossFunctions.LossFunction.MCXENT)
+                        .activation(Activation.SOFTMAX)
+                        .nIn(secondLayerSize)
+                        .nOut(3)
+                        .updater(Updater.ADAGRAD)
+                        .weightInit(WeightInit.XAVIER)
+                        .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
+                        .gradientNormalizationThreshold(10)
+                        .build())
+                .inputPreProcessor(4, new FeedForwardToRnnPreProcessor())
+                .pretrain(false)
+                .backprop(true)
                 .build();
 
         return conf;
@@ -278,16 +303,28 @@ public class TradingBotOnMovingTimeSeries {
         // Building the trading strategy
         Strategy strategy = buildStrategy(series[0]);
 
-        int frameSize = 5;
-        DataSetIterator iter = new RecordReaderDataSetIterator(new TickRecordReader(series[0],indicators,frameSize), series[0].getEndIndex() - frameSize,indicators.size(), ActionType.values().length);
+        int frameSize = 10;
+        int batchSize = 25;
+
+        DataSetIterator iter = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
+//        DataSetIterator iter = new SequenceRecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
 
         MultiLayerConfiguration multiLayerConfiguration = getNetwork(indicators.size(), ActionType.values().length);
         MultiLayerNetwork model = new MultiLayerNetwork(multiLayerConfiguration);
         model.init();
-        model.setListeners(new ScoreIterationListener(100));    //Print score every 100 parameter updates
+        model.setListeners(new ScoreIterationListener(10));    //Print score every 100 parameter updates
 
-        for ( int n = 0; n < nEpochs; n++) {
-            model.fit( iter );
+        /*
+        for (int n = 0; n < nEpochs; n++) {
+            model.fit(iter);
+        }
+        */
+
+        for (int i = 0; i < nEpochs; i++) {
+            while (iter.hasNext())
+                model.fit(iter.next());
+            System.out.println("Epoch " + i + " complete");
+
         }
 
         AISTrategy aisTrategy = new AISTrategy(model);
@@ -296,7 +333,7 @@ public class TradingBotOnMovingTimeSeries {
         // Initializing the trading history
         TradingRecord tradingRecord = new BaseTradingRecord();
         System.out.println("************************************************************");
-        
+
         /**
          * We run the strategy for the 50 next ticks.
          */
@@ -336,23 +373,25 @@ public class TradingBotOnMovingTimeSeries {
 
         Evaluation eval = new Evaluation(ActionType.values().length);
 
-        DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1],indicators,frameSize), series[1].getEndIndex() - frameSize,indicators.size(), ActionType.values().length);
+        DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
 
-        while(testIter.hasNext()){
+        while (testIter.hasNext()) {
             DataSet t = testIter.next();
             INDArray features = t.getFeatureMatrix();
             INDArray labels = t.getLabels();
-            INDArray predicted = model.output(features,false);
+            INDArray predicted = model.output(features, false);
 
             eval.eval(labels, predicted);
+//            eval.evalTimeSeries(labels, predicted);
         }
 
         System.out.print(eval.stats());
 
 
+
         TimeSeriesCollection dataset = new TimeSeriesCollection();
         dataset.addSeries(buildChartTimeSeries(series[0], new ClosePriceIndicator(series[0]), "Bitstamp Bitcoin (BTC) - learn"));
-        dataset.addSeries(buildChartTimeSeries(series[1], new ClosePriceIndicator(series[1]), "Bitstamp Bitcoin (BTC) - test"));
+//        dataset.addSeries(buildChartTimeSeries(series[1], new ClosePriceIndicator(series[1]), "Bitstamp Bitcoin (BTC) - test"));
 
         /**
          * Creating the chart
