@@ -42,21 +42,20 @@ public class TickRecordReader implements RecordReader {
         this.frame = frame;
     }
 
-    private static ActionType getType(TimeSeries series, int idx, int frame){
+    private static ActionType getType(TimeSeries series, int idx, int frame) {
         Tick first = series.getTick(idx);
         Tick firstAndOne = series.getTick(idx + 1);
         Tick second = series.getTick(idx + frame);
 
         Decimal pertencage = second.getClosePrice().multipliedBy(Decimal.valueOf(100)).dividedBy(first.getClosePrice());
-        if(firstAndOne.getClosePrice().isGreaterThan(first.getClosePrice())){
-            return ActionType.BUY;
-//        } else if (pertencage.isLessThanOrEqual(Decimal.valueOf(95))){
-        } else if (second.getClosePrice().isLessThan(first.getClosePrice())){
+
+        if (firstAndOne.getClosePrice().isLessThan(first.getClosePrice())) {
             return ActionType.SELL;
+        } else if (second.getClosePrice().isGreaterThan(first.getClosePrice())) {
+            return ActionType.BUY;
         }
         return ActionType.NOTHING;
     }
-
 /*
     private static ActionType getType(TimeSeries series, int idx, int frame){
         Tick first = series.getTick(idx);
@@ -70,104 +69,104 @@ public class TickRecordReader implements RecordReader {
         return ActionType.NOTHING;
     }
 */
-    @Override
-    public void initialize(InputSplit split) throws IOException, InterruptedException {
+        @Override
+        public void initialize (InputSplit split) throws IOException, InterruptedException {
 
-    }
-
-    @Override
-    public void initialize(Configuration conf, InputSplit split) throws IOException, InterruptedException {
-
-    }
-
-    @Override
-    public boolean batchesSupported() {
-        return false;
-    }
-
-    @Override
-    public List<Writable> next(int num) {
-        List<Writable> writables = new ArrayList<>();
-        for(Indicator<Decimal> indicator : indicators){
-            writables.add(new DoubleWritable(indicator.getValue(num).toDouble()));
         }
-        writables.add(new Text(getType(timeSeries,num,frame).getName()));
-        return writables;
-    }
 
-    @Override
-    public List<Writable> next() {
-        List<Writable> writables = new ArrayList<>();
-        for(Indicator<Decimal> indicator : indicators){
-            writables.add(new DoubleWritable(indicator.getValue(counter).toDouble()));
+        @Override
+        public void initialize (Configuration conf, InputSplit split) throws IOException, InterruptedException {
+
         }
-        writables.add(new IntWritable(getType(timeSeries,counter,frame).getClassNr()));
-        counter++;
-        return writables;
+
+        @Override
+        public boolean batchesSupported () {
+            return false;
+        }
+
+        @Override
+        public List<Writable> next ( int num){
+            List<Writable> writables = new ArrayList<>();
+            for (Indicator<Decimal> indicator : indicators) {
+                writables.add(new DoubleWritable(indicator.getValue(num).toDouble()));
+            }
+            writables.add(new Text(getType(timeSeries, num, frame).getName()));
+            return writables;
+        }
+
+        @Override
+        public List<Writable> next () {
+            List<Writable> writables = new ArrayList<>();
+            for (Indicator<Decimal> indicator : indicators) {
+                writables.add(new DoubleWritable(indicator.getValue(counter).toDouble()));
+            }
+            writables.add(new IntWritable(getType(timeSeries, counter, frame).getClassNr()));
+            counter++;
+            return writables;
+        }
+
+        @Override
+        public boolean hasNext () {
+            return counter <= timeSeries.getEndIndex() - frame;
+        }
+
+        @Override
+        public List<String> getLabels () {
+            return Arrays.stream(ActionType.values()).map(ActionType::getName).collect(Collectors.toList());
+        }
+
+        @Override
+        public void reset () {
+
+        }
+
+        @Override
+        public List<Writable> record (URI uri, DataInputStream dataInputStream) throws IOException {
+            throw new UnsupportedOperationException("Reading CSV data from DataInputStream not yet implemented");
+        }
+
+        @Override
+        public Record nextRecord () {
+            return new org.datavec.api.records.impl.Record(next(), null);
+        }
+
+        @Override
+        public Record loadFromMetaData (RecordMetaData recordMetaData) throws IOException {
+            return null;
+        }
+
+        @Override
+        public List<Record> loadFromMetaData (List < RecordMetaData > recordMetaDatas) throws IOException {
+            return null;
+        }
+
+        @Override
+        public List<RecordListener> getListeners () {
+            return recordListeners;
+        }
+
+        @Override
+        public void setListeners (RecordListener...listeners){
+            recordListeners.addAll(Arrays.asList(listeners));
+        }
+
+        @Override
+        public void setListeners (Collection < RecordListener > listeners) {
+            recordListeners.addAll(listeners);
+        }
+
+        @Override
+        public void close () throws IOException {
+
+        }
+
+        @Override
+        public void setConf (Configuration conf){
+
+        }
+
+        @Override
+        public Configuration getConf () {
+            return null;
+        }
     }
-
-    @Override
-    public boolean hasNext() {
-        return counter <= timeSeries.getEndIndex() - frame;
-    }
-
-    @Override
-    public List<String> getLabels() {
-        return Arrays.stream(ActionType.values()).map(ActionType::getName).collect(Collectors.toList());
-    }
-
-    @Override
-    public void reset() {
-
-    }
-
-    @Override
-    public List<Writable> record(URI uri, DataInputStream dataInputStream) throws IOException {
-        throw new UnsupportedOperationException("Reading CSV data from DataInputStream not yet implemented");
-    }
-
-    @Override
-    public Record nextRecord() {
-        return new org.datavec.api.records.impl.Record(next(),null);
-    }
-
-    @Override
-    public Record loadFromMetaData(RecordMetaData recordMetaData) throws IOException {
-        return null;
-    }
-
-    @Override
-    public List<Record> loadFromMetaData(List<RecordMetaData> recordMetaDatas) throws IOException {
-        return null;
-    }
-
-    @Override
-    public List<RecordListener> getListeners() {
-        return recordListeners;
-    }
-
-    @Override
-    public void setListeners(RecordListener... listeners) {
-        recordListeners.addAll(Arrays.asList(listeners));
-    }
-
-    @Override
-    public void setListeners(Collection<RecordListener> listeners) {
-        recordListeners.addAll(listeners);
-    }
-
-    @Override
-    public void close() throws IOException {
-
-    }
-
-    @Override
-    public void setConf(Configuration conf) {
-
-    }
-
-    @Override
-    public Configuration getConf() {
-        return null;
-    }
-}

@@ -71,11 +71,15 @@ public class BuyAndSellSignalsToChart {
      * @param strategy a trading strategy
      * @param plot the plot
      */
-    private static void addBuySellSignals(TimeSeries series, Strategy strategy, XYPlot plot) {
+    public static void addBuySellSignals(TimeSeries series, Strategy strategy, XYPlot plot) {
         // Running the strategy
         TimeSeriesManager seriesManager = new TimeSeriesManager(series);
         List<Trade> trades = seriesManager.run(strategy).getTrades();
         // Adding markers to plot
+        addBuySellSignals(series, trades, plot);
+    }
+
+    public static void addBuySellSignals(TimeSeries series, List<Trade> trades, XYPlot plot){
         for (Trade trade : trades) {
             // Buy signal
             double buySignalTickTime = new Minute(Date.from(series.getTick(trade.getEntry().getIndex()).getEndTime().toInstant())).getFirstMillisecond();

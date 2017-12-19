@@ -47,6 +47,7 @@ import org.jfree.data.time.TimeSeriesCollection;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.cpu.nativecpu.NDArray;
 import org.nd4j.linalg.dataset.DataSet;
+import org.nd4j.linalg.dataset.api.preprocessor.NormalizerStandardize;
 import org.ta4j.core.analysis.criteria.BuyAndHoldCriterion;
 import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
 import ta4jexamples.reader.*;
@@ -79,6 +80,7 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static ta4jexamples.analysis.BuyAndSellSignalsToChart.addBuySellSignals;
 import static ta4jexamples.analysis.BuyAndSellSignalsToChart.buildChartTimeSeries;
 import static ta4jexamples.analysis.BuyAndSellSignalsToChart.displayChart;
 
@@ -108,8 +110,8 @@ public class TradingBotOnMovingTimeSeries {
 
         TimeSeries[] timeSeries = new TimeSeries[2];
 
-        timeSeries[0] = new BaseTimeSeries(new ArrayList<>(ticks.subList(0,600)));
-        timeSeries[1] = new BaseTimeSeries(new ArrayList<>(ticks.subList(600,ticks.size()-1)));
+        timeSeries[0] = new BaseTimeSeries(new ArrayList<>(ticks.subList(0,1400)));
+        timeSeries[1] = new BaseTimeSeries(new ArrayList<>(ticks.subList(1400,ticks.size()-1)));
 
         System.out.print("Initial tick count: " + timeSeries[0].getTickCount());
         LAST_TICK_CLOSE_PRICE = timeSeries[0].getTick(timeSeries[0].getEndIndex()).getClosePrice();
@@ -162,27 +164,27 @@ public class TradingBotOnMovingTimeSeries {
         indicators.add(minPriceIndicator);
         indicators.add(maxPriceIndicator);
 
-        indicators.add(sma5);
-        indicators.add(sma12);
-        indicators.add(sma50);
-        indicators.add(sma200);
+//        indicators.add(sma5);
+//        indicators.add(sma12);
+//        indicators.add(sma50);
+//        indicators.add(sma200);
 
-        indicators.add(ema5);
-        indicators.add(ema12);
-        indicators.add(ema50);
-        indicators.add(ema200);
+//        indicators.add(ema5);
+//        indicators.add(ema12);
+//        indicators.add(ema50);
+//        indicators.add(ema200);
 
-        indicators.add(rsi1);
-        indicators.add(rsi2);
+//        indicators.add(rsi1);
+//        indicators.add(rsi2);
 
-        indicators.add(macd);
+//        indicators.add(macd);
 
-        indicators.add(CCI5);
-        indicators.add(CCI50);
-        indicators.add(CCI200);
+//        indicators.add(CCI5);
+//        indicators.add(CCI50);
+//        indicators.add(CCI200);
 
         indicators.add(rocIndicator);
-        indicators.add(rocIndicatorVolume);
+//        indicators.add(rocIndicatorVolume);
 
         // Signals
         // Buy when SMA goes over close price
@@ -226,7 +228,7 @@ public class TradingBotOnMovingTimeSeries {
 
     private static MultiLayerConfiguration getNetwork(int layerSize, int classes) {
 
-        int secondLayerSize = (int) Math.ceil(1.5 * layerSize);
+        int secondLayerSize = (int) Math.ceil(2.5 * layerSize);
 /*
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
                 .iterations(1)
@@ -301,12 +303,12 @@ public class TradingBotOnMovingTimeSeries {
         TimeSeries[] series = initMovingTimeSeries();
 
         // Building the trading strategy
-        Strategy strategy = buildStrategy(series[0]);
+        buildStrategy(series[0]);
 
-        int frameSize = 10;
-        int batchSize = 25;
+        int frameSize = 3;
+        int batchSize = 100;
 
-        DataSetIterator iter = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
+        DataSetIterator trainData = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
 //        DataSetIterator iter = new SequenceRecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
 
         MultiLayerConfiguration multiLayerConfiguration = getNetwork(indicators.size(), ActionType.values().length);
@@ -320,14 +322,25 @@ public class TradingBotOnMovingTimeSeries {
         }
         */
 
+        NormalizerStandardize normalizer = new NormalizerStandardize();
+        normalizer.fit(trainData);
+        trainData.reset();
+
+        trainData.setPreProcessor(normalizer);
+
+        System.out.println("Means original: " + normalizer.getMean());
+        System.out.println("Stds original:  " + normalizer.getStd());
+
         for (int i = 0; i < nEpochs; i++) {
-            while (iter.hasNext())
-                model.fit(iter.next());
+            while (trainData.hasNext()) {
+                DataSet dataSet = trainData.next();
+                model.fit(dataSet);
+            }
             System.out.println("Epoch " + i + " complete");
 
         }
 
-        AISTrategy aisTrategy = new AISTrategy(model);
+        Strategy aisTrategy = new AISTrategy(model, indicators);
 
 
         // Initializing the trading history
@@ -347,7 +360,7 @@ public class TradingBotOnMovingTimeSeries {
             series[0].addTick(tick);
 
             int endIndex = series[0].getEndIndex();
-            if (aisTrategy.shouldEnter(endIndex, indicators)) {
+            if (aisTrategy.shouldEnter(endIndex)) {
                 // Our strategy should enter
                 System.out.println("Strategy should ENTER on " + endIndex);
                 boolean entered = tradingRecord.enter(endIndex, tick.getClosePrice(), Decimal.TEN);
@@ -357,7 +370,7 @@ public class TradingBotOnMovingTimeSeries {
                             + " (price=" + entry.getPrice().toDouble()
                             + ", amount=" + entry.getAmount().toDouble() + ")");
                 }
-            } else if (aisTrategy.shouldExit(endIndex, indicators)) {
+            } else if (aisTrategy.shouldExit(endIndex)) {
                 // Our strategy should exit
                 System.out.println("Strategy should EXIT on " + endIndex);
                 boolean exited = tradingRecord.exit(endIndex, tick.getClosePrice(), Decimal.TEN);
@@ -374,6 +387,10 @@ public class TradingBotOnMovingTimeSeries {
         Evaluation eval = new Evaluation(ActionType.values().length);
 
         DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
+
+        testIter.setPreProcessor(normalizer);
+//        Evaluation evaluation = model.evaluate(testIter);
+//        System.out.print(evaluation.accuracy() + " " + evaluation.f1());
 
         while (testIter.hasNext()) {
             DataSet t = testIter.next();
@@ -410,7 +427,9 @@ public class TradingBotOnMovingTimeSeries {
         axis.setDateFormatOverride(new SimpleDateFormat("MM-dd HH:mm"));
         displayChart(chart);
 
-        System.out.println("Total profit for the strategy: " + new TotalProfitCriterion().calculate(series[1], tradingRecord));
+        System.out.println("Total profit for the strategy: " + new TotalProfitCriterion().calculate(series[0], tradingRecord));
         System.out.println("Buy-and-hold: " + new BuyAndHoldCriterion().calculate(series[1], tradingRecord));
+
+        addBuySellSignals(series[0],tradingRecord.getTrades(),plot);
     }
 }
