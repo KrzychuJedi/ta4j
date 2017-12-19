@@ -22,22 +22,12 @@
  */
 package ta4jexamples.bots;
 
-import org.apache.commons.lang3.SerializationUtils;
-import org.datavec.api.conf.Configuration;
-import org.datavec.api.records.Record;
-import org.datavec.api.records.listener.RecordListener;
-import org.datavec.api.records.metadata.RecordMetaData;
-import org.datavec.api.records.reader.RecordReader;
-import org.datavec.api.split.InputSplit;
-import org.datavec.api.writable.Writable;
-import org.deeplearning4j.datasets.datavec.SequenceRecordReaderDataSetIterator;
 import org.deeplearning4j.eval.Evaluation;
 import org.deeplearning4j.nn.conf.GradientNormalization;
 import org.deeplearning4j.nn.conf.Updater;
 import org.deeplearning4j.nn.conf.layers.GravesLSTM;
 import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.conf.preprocessor.FeedForwardToRnnPreProcessor;
-import org.deeplearning4j.nn.conf.preprocessor.RnnToFeedForwardPreProcessor;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
@@ -45,18 +35,18 @@ import org.jfree.chart.axis.DateAxis;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.data.time.TimeSeriesCollection;
 import org.nd4j.linalg.api.ndarray.INDArray;
-import org.nd4j.linalg.cpu.nativecpu.NDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.preprocessor.NormalizerStandardize;
 import org.ta4j.core.analysis.criteria.BuyAndHoldCriterion;
 import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
+import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
+import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
 import ta4jexamples.reader.*;
 import org.deeplearning4j.datasets.datavec.RecordReaderDataSetIterator;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.deeplearning4j.nn.conf.layers.DenseLayer;
-import org.deeplearning4j.nn.conf.layers.OutputLayer;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.nd4j.linalg.activations.Activation;
@@ -72,13 +62,9 @@ import ta4jexamples.enums.ActionType;
 import ta4jexamples.loaders.CsvTradesLoader;
 import ta4jexamples.strategy.AISTrategy;
 
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.time.ZonedDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static ta4jexamples.analysis.BuyAndSellSignalsToChart.addBuySellSignals;
 import static ta4jexamples.analysis.BuyAndSellSignalsToChart.buildChartTimeSeries;
@@ -125,7 +111,7 @@ public class TradingBotOnMovingTimeSeries {
      * @param series a time series
      * @return a dummy strategy
      */
-    private static Strategy buildStrategy(TimeSeries series) {
+    private static Rule[] buildStrategy(TimeSeries series) {
         if (series == null) {
             throw new IllegalArgumentException("Series cannot be null");
         }
@@ -163,37 +149,41 @@ public class TradingBotOnMovingTimeSeries {
         indicators.add(openPriceIndicator);
         indicators.add(minPriceIndicator);
         indicators.add(maxPriceIndicator);
+/*
+        indicators.add(sma5);
+        indicators.add(sma12);
+        indicators.add(sma50);
+        indicators.add(sma200);
 
-//        indicators.add(sma5);
-//        indicators.add(sma12);
-//        indicators.add(sma50);
-//        indicators.add(sma200);
+        indicators.add(ema5);
+        indicators.add(ema12);
+        indicators.add(ema50);
+        indicators.add(ema200);
 
-//        indicators.add(ema5);
-//        indicators.add(ema12);
-//        indicators.add(ema50);
-//        indicators.add(ema200);
+        indicators.add(rsi1);
+        indicators.add(rsi2);
 
-//        indicators.add(rsi1);
-//        indicators.add(rsi2);
+        indicators.add(macd);
 
-//        indicators.add(macd);
-
-//        indicators.add(CCI5);
-//        indicators.add(CCI50);
-//        indicators.add(CCI200);
+        indicators.add(CCI5);
+        indicators.add(CCI50);
+        indicators.add(CCI200);
 
         indicators.add(rocIndicator);
-//        indicators.add(rocIndicatorVolume);
-
+        indicators.add(rocIndicatorVolume);
+*/
         // Signals
         // Buy when SMA goes over close price
         // Sell when close price goes over SMA
-        Strategy buySellSignals = new BaseStrategy(
-                new OverIndicatorRule(sma12, closePrice),
-                new UnderIndicatorRule(sma12, closePrice)
-        );
-        return buySellSignals;
+
+        Rule[] rules = new Rule[2];
+        rules[0] = new OverIndicatorRule(sma5, sma200) // Trend
+                .and(new CrossedDownIndicatorRule(rsi2, Decimal.valueOf(5))) // Signal 1
+                .and(new OverIndicatorRule(sma5, closePrice));;
+        rules[1] = new UnderIndicatorRule(sma5, sma200) // Trend
+                .and(new CrossedUpIndicatorRule(rsi2, Decimal.valueOf(95))) // Signal 1
+                .and(new UnderIndicatorRule(sma5, closePrice));
+        return rules;
     }
 
     /**
@@ -303,12 +293,12 @@ public class TradingBotOnMovingTimeSeries {
         TimeSeries[] series = initMovingTimeSeries();
 
         // Building the trading strategy
-        buildStrategy(series[0]);
+        Rule[] rules = buildStrategy(series[0]);
 
         int frameSize = 3;
         int batchSize = 100;
 
-        DataSetIterator trainData = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
+        DataSetIterator trainData = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize, rules), batchSize, indicators.size(), ActionType.values().length);
 //        DataSetIterator iter = new SequenceRecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
 
         MultiLayerConfiguration multiLayerConfiguration = getNetwork(indicators.size(), ActionType.values().length);
@@ -340,7 +330,7 @@ public class TradingBotOnMovingTimeSeries {
 
         }
 
-        Strategy aisTrategy = new AISTrategy(model, indicators);
+        Strategy aisTrategy = new AISTrategy(model, indicators, null);
 
 
         // Initializing the trading history
@@ -386,7 +376,7 @@ public class TradingBotOnMovingTimeSeries {
 
         Evaluation eval = new Evaluation(ActionType.values().length);
 
-        DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
+        DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1], indicators, frameSize, rules), batchSize, indicators.size(), ActionType.values().length);
 
         testIter.setPreProcessor(normalizer);
 //        Evaluation evaluation = model.evaluate(testIter);
