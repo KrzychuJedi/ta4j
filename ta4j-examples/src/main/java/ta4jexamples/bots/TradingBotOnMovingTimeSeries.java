@@ -83,7 +83,13 @@ public class TradingBotOnMovingTimeSeries {
 
     static List<Indicator<Decimal>> indicators = new ArrayList<>();
 
-    private static int nEpochs = 2000;
+    private static int nEpochs = 10;
+
+    static Indicator cuttedSma;
+
+    static TimeSeries cutted;
+
+    static ClosePriceIndicator cuttedClosePrice;
 
     /**
      * Builds a moving time series (i.e. keeping only the maxTickCount last ticks)
@@ -94,10 +100,23 @@ public class TradingBotOnMovingTimeSeries {
     private static TimeSeries[] initMovingTimeSeries() {
         List<Tick> ticks = CsvTradesLoader.loadBitstampSeries().getTickData();
 
-        TimeSeries[] timeSeries = new TimeSeries[2];
+        TimeSeries[] timeSeries = new TimeSeries[3];
 
-        timeSeries[0] = new BaseTimeSeries(new ArrayList<>(ticks.subList(0,1400)));
-        timeSeries[1] = new BaseTimeSeries(new ArrayList<>(ticks.subList(1400,ticks.size()-1)));
+
+        List<Tick> fakeTicks = new ArrayList<>();
+
+        int frame = 5;
+        for (int i = 0; i < ticks.size() - frame; i++) {
+            Tick tick = ticks.get(i);
+            Tick tickFrame = ticks.get(i + frame);
+            tick = new BaseTick(tick.getTimePeriod(), tick.getEndTime(), tick.getOpenPrice(), tick.getMaxPrice(), tick.getMinPrice(), tickFrame.getClosePrice(), tick.getVolume(), tick.getAmount());
+            fakeTicks.add(tick);
+        }
+
+
+        timeSeries[0] = new BaseTimeSeries(new ArrayList<>(ticks.subList(0, 1600)));
+        timeSeries[2] = new BaseTimeSeries(new ArrayList<>(fakeTicks.subList(0, 1600)));
+        timeSeries[1] = new BaseTimeSeries(new ArrayList<>(ticks.subList(1600, ticks.size() - 1)));
 
         System.out.print("Initial tick count: " + timeSeries[0].getTickCount());
         LAST_TICK_CLOSE_PRICE = timeSeries[0].getTick(timeSeries[0].getEndIndex()).getClosePrice();
@@ -111,18 +130,25 @@ public class TradingBotOnMovingTimeSeries {
      * @param series a time series
      * @return a dummy strategy
      */
-    private static Rule[] buildStrategy(TimeSeries series) {
+    private static Rule[] buildStrategy(TimeSeries[] series) {
         if (series == null) {
             throw new IllegalArgumentException("Series cannot be null");
         }
 
-        ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
-        VolumeIndicator volumeIndicator = new VolumeIndicator(series);
-        OpenPriceIndicator openPriceIndicator = new OpenPriceIndicator(series);
-        MinPriceIndicator minPriceIndicator = new MinPriceIndicator(series);
-        MaxPriceIndicator maxPriceIndicator = new MaxPriceIndicator(series);
+//        cutted = new BaseTimeSeries(new ArrayList<>(series.getTickData().subList(3,series.getTickData().size())));
+        cutted = series[2];
+        cuttedClosePrice = new ClosePriceIndicator(cutted);
+        cuttedSma = new SMAIndicator(cuttedClosePrice, 10);
+//        cuttedSma = new EMAIndicator(cuttedClosePrice, 5);
+
+        ClosePriceIndicator closePrice = new ClosePriceIndicator(series[0]);
+        VolumeIndicator volumeIndicator = new VolumeIndicator(series[0]);
+        OpenPriceIndicator openPriceIndicator = new OpenPriceIndicator(series[0]);
+        MinPriceIndicator minPriceIndicator = new MinPriceIndicator(series[0]);
+        MaxPriceIndicator maxPriceIndicator = new MaxPriceIndicator(series[0]);
 
         SMAIndicator sma5 = new SMAIndicator(closePrice, 5);
+
         SMAIndicator sma12 = new SMAIndicator(closePrice, 12);
         SMAIndicator sma50 = new SMAIndicator(closePrice, 50);
         SMAIndicator sma200 = new SMAIndicator(closePrice, 200);
@@ -137,41 +163,47 @@ public class TradingBotOnMovingTimeSeries {
 
         MACDIndicator macd = new MACDIndicator(closePrice, 9, 26);
 
-        CCIIndicator CCI5 = new CCIIndicator(series, 5);
-        CCIIndicator CCI50 = new CCIIndicator(series, 50);
-        CCIIndicator CCI200 = new CCIIndicator(series, 200);
+        CCIIndicator CCI5 = new CCIIndicator(series[0], 5);
+        CCIIndicator CCI50 = new CCIIndicator(series[0], 50);
+        CCIIndicator CCI200 = new CCIIndicator(series[0], 200);
 
         ROCIndicator rocIndicator = new ROCIndicator(closePrice, 12);
         ROCIndicator rocIndicatorVolume = new ROCIndicator(closePrice, 12);
+
+        SumIndicator sumIndicator = new SumIndicator(minPriceIndicator, maxPriceIndicator);
+        MultiplierIndicator multiplierIndicator = new MultiplierIndicator(sumIndicator, Decimal.valueOf(0.5));
+        AwesomeOscillatorIndicator awesomeOscillatorIndicator = new AwesomeOscillatorIndicator(multiplierIndicator,5,50);
 
         indicators.add(closePrice);
         indicators.add(volumeIndicator);
         indicators.add(openPriceIndicator);
         indicators.add(minPriceIndicator);
         indicators.add(maxPriceIndicator);
-/*
+
         indicators.add(sma5);
         indicators.add(sma12);
         indicators.add(sma50);
-        indicators.add(sma200);
+//        indicators.add(sma200);
 
         indicators.add(ema5);
         indicators.add(ema12);
         indicators.add(ema50);
-        indicators.add(ema200);
+//        indicators.add(ema200);
 
         indicators.add(rsi1);
-        indicators.add(rsi2);
+//        indicators.add(rsi2);
 
         indicators.add(macd);
 
         indicators.add(CCI5);
         indicators.add(CCI50);
-        indicators.add(CCI200);
+//        indicators.add(CCI200);
 
         indicators.add(rocIndicator);
         indicators.add(rocIndicatorVolume);
-*/
+
+        indicators.add(awesomeOscillatorIndicator);
+
         // Signals
         // Buy when SMA goes over close price
         // Sell when close price goes over SMA
@@ -179,10 +211,25 @@ public class TradingBotOnMovingTimeSeries {
         Rule[] rules = new Rule[2];
         rules[0] = new OverIndicatorRule(sma5, sma200) // Trend
                 .and(new CrossedDownIndicatorRule(rsi2, Decimal.valueOf(5))) // Signal 1
-                .and(new OverIndicatorRule(sma5, closePrice));;
+                .and(new OverIndicatorRule(sma5, closePrice));
+        ;
         rules[1] = new UnderIndicatorRule(sma5, sma200) // Trend
                 .and(new CrossedUpIndicatorRule(rsi2, Decimal.valueOf(95))) // Signal 1
                 .and(new UnderIndicatorRule(sma5, closePrice));
+
+        rules[0] = new OverIndicatorRule(cuttedSma, closePrice);
+        rules[1] = new UnderIndicatorRule(cuttedSma, closePrice);
+
+        rules[0] = new OverIndicatorRule(cuttedSma, closePrice).and(new OverIndicatorRule(sma5, sma50));
+        rules[1] = new UnderIndicatorRule(cuttedSma, closePrice).and(new UnderIndicatorRule(sma5, sma50));
+/*
+        rules[0] = new OverIndicatorRule(cuttedSma, closePrice)
+                .and(new OverIndicatorRule(sma5, sma50))
+                .and(new CrossedDownIndicatorRule(rsi2, Decimal.valueOf(35)));
+        rules[1] = new UnderIndicatorRule(cuttedSma, closePrice)
+                .and(new UnderIndicatorRule(sma5, sma50))
+                .and(new CrossedUpIndicatorRule(rsi2, Decimal.valueOf(65)));
+                */
         return rules;
     }
 
@@ -272,7 +319,7 @@ public class TradingBotOnMovingTimeSeries {
                 .layer(5, new RnnOutputLayer.Builder(LossFunctions.LossFunction.MCXENT)
                         .activation(Activation.SOFTMAX)
                         .nIn(secondLayerSize)
-                        .nOut(3)
+                        .nOut(classes)
                         .updater(Updater.ADAGRAD)
                         .weightInit(WeightInit.XAVIER)
                         .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
@@ -281,6 +328,8 @@ public class TradingBotOnMovingTimeSeries {
                 .inputPreProcessor(4, new FeedForwardToRnnPreProcessor())
                 .pretrain(false)
                 .backprop(true)
+                .tBPTTForwardLength(100)
+                .tBPTTBackwardLength(100)
                 .build();
 
         return conf;
@@ -293,15 +342,21 @@ public class TradingBotOnMovingTimeSeries {
         TimeSeries[] series = initMovingTimeSeries();
 
         // Building the trading strategy
-        Rule[] rules = buildStrategy(series[0]);
+        Rule[] rules = buildStrategy(series);
 
-        int frameSize = 3;
+        int frameSize = 10;
         int batchSize = 100;
+        int possibleLabels = 2;
 
-        DataSetIterator trainData = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize, rules), batchSize, indicators.size(), ActionType.values().length);
-//        DataSetIterator iter = new SequenceRecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), ActionType.values().length);
+        DataSetIterator trainData = new RecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize, rules), batchSize, indicators.size(), possibleLabels) {
+            @Override
+            public List<String> getLabels() {
+                return Arrays.asList(ActionType.BUY.getName(), ActionType.SELL.getName());
+            }
+        };
+//        DataSetIterator iter = new SequenceRecordReaderDataSetIterator(new TickRecordReader(series[0], indicators, frameSize), batchSize, indicators.size(), possibleLabels);
 
-        MultiLayerConfiguration multiLayerConfiguration = getNetwork(indicators.size(), ActionType.values().length);
+        MultiLayerConfiguration multiLayerConfiguration = getNetwork(indicators.size(), possibleLabels);
         MultiLayerNetwork model = new MultiLayerNetwork(multiLayerConfiguration);
         model.init();
         model.setListeners(new ScoreIterationListener(10));    //Print score every 100 parameter updates
@@ -326,11 +381,19 @@ public class TradingBotOnMovingTimeSeries {
                 DataSet dataSet = trainData.next();
                 model.fit(dataSet);
             }
+            trainData.reset();
             System.out.println("Epoch " + i + " complete");
-
         }
 
-        Strategy aisTrategy = new AISTrategy(model, indicators, null);
+
+        trainData.reset();
+        while (trainData.hasNext()) {
+            DataSet dataSet = trainData.next();
+            model.rnnTimeStep(dataSet.getFeatureMatrix());
+        }
+
+//        Strategy aisTrategy = new AISTrategy(model, indicators, normalizer);
+        Strategy aisTrategy = new AISTrategy(model, indicators, normalizer);
 
 
         // Initializing the trading history
@@ -374,9 +437,9 @@ public class TradingBotOnMovingTimeSeries {
         }
 
 
-        Evaluation eval = new Evaluation(ActionType.values().length);
+        Evaluation eval = new Evaluation(possibleLabels);
 
-        DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1], indicators, frameSize, rules), batchSize, indicators.size(), ActionType.values().length);
+        DataSetIterator testIter = new RecordReaderDataSetIterator(new TickRecordReader(series[1], indicators, frameSize, rules), batchSize, indicators.size(), possibleLabels);
 
         testIter.setPreProcessor(normalizer);
 //        Evaluation evaluation = model.evaluate(testIter);
@@ -394,11 +457,13 @@ public class TradingBotOnMovingTimeSeries {
 
         System.out.print(eval.stats());
 
-
+        System.out.println("Total profit for the strategy: " + new TotalProfitCriterion().calculate(series[0], tradingRecord));
+        System.out.println("Buy-and-hold: " + new BuyAndHoldCriterion().calculate(series[1], tradingRecord));
 
         TimeSeriesCollection dataset = new TimeSeriesCollection();
         dataset.addSeries(buildChartTimeSeries(series[0], new ClosePriceIndicator(series[0]), "Bitstamp Bitcoin (BTC) - learn"));
-//        dataset.addSeries(buildChartTimeSeries(series[1], new ClosePriceIndicator(series[1]), "Bitstamp Bitcoin (BTC) - test"));
+        dataset.addSeries(buildChartTimeSeries(cutted, cuttedSma, "cuttedSma"));
+        dataset.addSeries(buildChartTimeSeries(cutted, cuttedClosePrice, "ccc"));
 
         /**
          * Creating the chart
@@ -417,9 +482,6 @@ public class TradingBotOnMovingTimeSeries {
         axis.setDateFormatOverride(new SimpleDateFormat("MM-dd HH:mm"));
         displayChart(chart);
 
-        System.out.println("Total profit for the strategy: " + new TotalProfitCriterion().calculate(series[0], tradingRecord));
-        System.out.println("Buy-and-hold: " + new BuyAndHoldCriterion().calculate(series[1], tradingRecord));
-
-        addBuySellSignals(series[0],tradingRecord.getTrades(),plot);
+        addBuySellSignals(series[0], tradingRecord.getTrades(), plot);
     }
 }
