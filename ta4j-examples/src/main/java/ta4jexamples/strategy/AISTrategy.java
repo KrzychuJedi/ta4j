@@ -37,7 +37,7 @@ public class AISTrategy implements Strategy {
                 normalizerStandardize.transform(features);
             }
 //        INDArray output = model.output(features, false);
-            INDArray output = model.rnnTimeStep(features);
+            INDArray output = model.output(features);
             boolean enter = Objects.equals(output.getColumn(0).maxNumber(), output.getRow(0).maxNumber())
                     && !Objects.equals(output.getColumn(0).maxNumber(), output.getColumn(1).maxNumber());
             if (enter) {
@@ -56,7 +56,7 @@ public class AISTrategy implements Strategy {
                 normalizerStandardize.transform(features);
             }
 //        INDArray output = model.output(features, false);
-            INDArray output = model.rnnTimeStep(features);
+            INDArray output = model.output(features);
             boolean exit = Objects.equals(output.getColumn(1).maxNumber(), output.getRow(0).maxNumber())
                     && !Objects.equals(output.getColumn(0).maxNumber(), output.getColumn(1).maxNumber());
             if (exit) {
