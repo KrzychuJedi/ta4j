@@ -39,6 +39,7 @@ import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.preprocessor.NormalizerStandardize;
 import org.ta4j.core.analysis.criteria.BuyAndHoldCriterion;
 import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
+import org.ta4j.core.indicators.volume.OnBalanceVolumeIndicator;
 import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
 import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
 import ta4jexamples.reader.*;
@@ -86,6 +87,7 @@ public class TradingBotOnMovingTimeSeries {
     private static int nEpochs = 10;
 
     static Indicator cuttedSma;
+    static Indicator sma;
 
     static TimeSeries cutted;
 
@@ -105,7 +107,7 @@ public class TradingBotOnMovingTimeSeries {
 
         List<Tick> fakeTicks = new ArrayList<>();
 
-        int frame = 5;
+        int frame = 3;
         for (int i = 0; i < ticks.size() - frame; i++) {
             Tick tick = ticks.get(i);
             Tick tickFrame = ticks.get(i + frame);
@@ -138,7 +140,7 @@ public class TradingBotOnMovingTimeSeries {
 //        cutted = new BaseTimeSeries(new ArrayList<>(series.getTickData().subList(3,series.getTickData().size())));
         cutted = series[2];
         cuttedClosePrice = new ClosePriceIndicator(cutted);
-        cuttedSma = new SMAIndicator(cuttedClosePrice, 10);
+        cuttedSma = new EMAIndicator(cuttedClosePrice, 10);
 //        cuttedSma = new EMAIndicator(cuttedClosePrice, 5);
 
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series[0]);
@@ -146,6 +148,8 @@ public class TradingBotOnMovingTimeSeries {
         OpenPriceIndicator openPriceIndicator = new OpenPriceIndicator(series[0]);
         MinPriceIndicator minPriceIndicator = new MinPriceIndicator(series[0]);
         MaxPriceIndicator maxPriceIndicator = new MaxPriceIndicator(series[0]);
+
+        sma = new EMAIndicator(closePrice, 10);
 
         SMAIndicator sma5 = new SMAIndicator(closePrice, 5);
 
@@ -173,6 +177,10 @@ public class TradingBotOnMovingTimeSeries {
         SumIndicator sumIndicator = new SumIndicator(minPriceIndicator, maxPriceIndicator);
         MultiplierIndicator multiplierIndicator = new MultiplierIndicator(sumIndicator, Decimal.valueOf(0.5));
         AwesomeOscillatorIndicator awesomeOscillatorIndicator = new AwesomeOscillatorIndicator(multiplierIndicator,5,50);
+
+        WilliamsRIndicator williamsRIndicator = new WilliamsRIndicator(series[0],14);
+
+        OnBalanceVolumeIndicator onBalanceVolumeIndicator = new OnBalanceVolumeIndicator(series[0]);
 
         indicators.add(closePrice);
         indicators.add(volumeIndicator);
@@ -203,6 +211,8 @@ public class TradingBotOnMovingTimeSeries {
         indicators.add(rocIndicatorVolume);
 
         indicators.add(awesomeOscillatorIndicator);
+        indicators.add(williamsRIndicator);
+//        indicators.add(onBalanceVolumeIndicator);
 
         // Signals
         // Buy when SMA goes over close price
@@ -222,6 +232,9 @@ public class TradingBotOnMovingTimeSeries {
 
         rules[0] = new OverIndicatorRule(cuttedSma, closePrice).and(new OverIndicatorRule(sma5, sma50));
         rules[1] = new UnderIndicatorRule(cuttedSma, closePrice).and(new UnderIndicatorRule(sma5, sma50));
+
+        rules[0] = new OverIndicatorRule(cuttedSma, sma);
+        rules[1] = new UnderIndicatorRule(cuttedSma, sma);
 /*
         rules[0] = new OverIndicatorRule(cuttedSma, closePrice)
                 .and(new OverIndicatorRule(sma5, sma50))
@@ -463,7 +476,8 @@ public class TradingBotOnMovingTimeSeries {
         TimeSeriesCollection dataset = new TimeSeriesCollection();
         dataset.addSeries(buildChartTimeSeries(series[0], new ClosePriceIndicator(series[0]), "Bitstamp Bitcoin (BTC) - learn"));
         dataset.addSeries(buildChartTimeSeries(cutted, cuttedSma, "cuttedSma"));
-        dataset.addSeries(buildChartTimeSeries(cutted, cuttedClosePrice, "ccc"));
+        dataset.addSeries(buildChartTimeSeries(series[0], sma, "sma"));
+//        dataset.addSeries(buildChartTimeSeries(cutted, cuttedClosePrice, "ccc"));
 
         /**
          * Creating the chart
